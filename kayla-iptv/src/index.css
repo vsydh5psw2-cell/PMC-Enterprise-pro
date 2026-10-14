@@ -1,0 +1,64 @@
+:root {
+  --ink: #071018;
+  --ink-soft: #0d1824;
+  --mist: #9fb0c3;
+  --snow: #f4f7fb;
+  --teal: #7ee0c3;
+  --teal-deep: #2aa889;
+  --gold: #e8c27a;
+  --line: rgba(255, 255, 255, 0.1);
+  --font-display: "Syne", sans-serif;
+  --font-body: "Sora", sans-serif;
+  color: var(--snow);
+  background: var(--ink);
+  font-family: var(--font-body);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: var(--ink);
+}
+
+img {
+  max-width: 100%;
+  display: block;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: 0;
+  background: none;
+  color: inherit;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+#root {
+  min-height: 100vh;
+}
