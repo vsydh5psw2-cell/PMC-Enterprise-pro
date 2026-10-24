@@ -14,6 +14,14 @@ bdk eval --dir .
 npm run check
 ```
 
+Arabic chat UI (separate from the BDK playground):
+
+```bash
+npm run dev          # agent on :3000
+npm run ui           # UI on :4173, proxies /v1 → agent
+# open http://127.0.0.1:4173
+```
+
 Run the CLI under Node, never Bun.
 
 ## Layout

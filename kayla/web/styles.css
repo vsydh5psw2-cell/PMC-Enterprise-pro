@@ -1,0 +1,337 @@
+:root {
+  --ink: #1a2e2b;
+  --ink-soft: #3d564f;
+  --foam: #f3f6f1;
+  --mist: #d7e4dc;
+  --leaf: #2f6b5a;
+  --leaf-deep: #1e4a3e;
+  --amber: #c9852a;
+  --amber-soft: rgba(201, 133, 42, 0.18);
+  --bubble-user: #1e4a3e;
+  --bubble-assistant: rgba(255, 255, 255, 0.72);
+  --danger: #9b3b2e;
+  --radius: 1.15rem;
+  --font-display: "Cairo", sans-serif;
+  --font-body: "IBM Plex Sans Arabic", sans-serif;
+  --shadow: 0 18px 50px rgba(26, 46, 43, 0.12);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--ink);
+  font-family: var(--font-body);
+  background: var(--foam);
+  overflow: hidden;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.atmosphere {
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse 80% 55% at 15% 10%, #cfe8d8 0%, transparent 55%),
+    radial-gradient(ellipse 70% 50% at 90% 0%, #f0d9a8 0%, transparent 50%),
+    radial-gradient(ellipse 60% 45% at 70% 100%, #b7d4c8 0%, transparent 55%),
+    linear-gradient(160deg, #eef4ef 0%, #e4ece4 45%, #d9e6df 100%);
+  z-index: 0;
+}
+
+.grain {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.45'/%3E%3C/svg%3E");
+  mix-blend-mode: soft-light;
+}
+
+.shell {
+  position: relative;
+  z-index: 2;
+  height: 100%;
+  max-width: 44rem;
+  margin: 0 auto;
+  padding: clamp(1.25rem, 4vw, 2.25rem);
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  gap: 1.25rem;
+}
+
+.brand-block {
+  animation: rise 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.brand {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(2.6rem, 9vw, 4.2rem);
+  line-height: 0.95;
+  letter-spacing: -0.03em;
+  color: var(--leaf-deep);
+}
+
+.headline {
+  margin: 0.55rem 0 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(1.15rem, 3.2vw, 1.45rem);
+  color: var(--ink);
+}
+
+.lede {
+  margin: 0.45rem 0 0;
+  max-width: 28rem;
+  color: var(--ink-soft);
+  font-size: 0.98rem;
+  line-height: 1.55;
+}
+
+.chat {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto auto;
+  gap: 0.75rem;
+  animation: rise 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: 80ms;
+}
+
+.thread {
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.25rem 0.15rem 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  scroll-behavior: smooth;
+}
+
+.thread:empty::before {
+  content: "ابدئي المحادثة — Kayla جاهزة تسمعك.";
+  margin: auto;
+  text-align: center;
+  color: var(--ink-soft);
+  font-size: 0.98rem;
+  opacity: 0.85;
+  animation: softPulse 2.8s ease-in-out infinite;
+}
+
+.bubble {
+  max-width: min(92%, 34rem);
+  padding: 0.85rem 1rem;
+  border-radius: var(--radius);
+  line-height: 1.55;
+  font-size: 0.98rem;
+  white-space: pre-wrap;
+  word-break: break-word;
+  animation: bubbleIn 420ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.bubble.user {
+  align-self: flex-start;
+  background: var(--bubble-user);
+  color: #f4faf7;
+  border-bottom-right-radius: 0.35rem;
+}
+
+.bubble.assistant {
+  align-self: flex-end;
+  background: var(--bubble-assistant);
+  color: var(--ink);
+  border: 1px solid rgba(47, 107, 90, 0.12);
+  backdrop-filter: blur(10px);
+  border-bottom-left-radius: 0.35rem;
+  box-shadow: var(--shadow);
+}
+
+.bubble.tool {
+  align-self: flex-end;
+  max-width: min(70%, 22rem);
+  padding: 0.4rem 0.7rem;
+  font-size: 0.78rem;
+  color: var(--leaf-deep);
+  background: var(--amber-soft);
+  border-radius: 999px;
+  border: 1px solid rgba(201, 133, 42, 0.25);
+}
+
+.bubble.error {
+  align-self: stretch;
+  background: rgba(155, 59, 46, 0.08);
+  color: var(--danger);
+  border: 1px solid rgba(155, 59, 46, 0.2);
+}
+
+.typing {
+  display: inline-flex;
+  gap: 0.28rem;
+  align-items: center;
+  min-height: 1.2em;
+}
+
+.typing span {
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 50%;
+  background: var(--leaf);
+  opacity: 0.45;
+  animation: dot 1.1s ease-in-out infinite;
+}
+
+.typing span:nth-child(2) {
+  animation-delay: 0.15s;
+}
+
+.typing span:nth-child(3) {
+  animation-delay: 0.3s;
+}
+
+.composer {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.65rem;
+  align-items: end;
+  padding: 0.65rem;
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(47, 107, 90, 0.14);
+  border-radius: calc(var(--radius) + 0.25rem);
+  backdrop-filter: blur(14px);
+  box-shadow: var(--shadow);
+}
+
+.composer textarea {
+  width: 100%;
+  resize: none;
+  border: 0;
+  outline: none;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 1rem;
+  line-height: 1.45;
+  max-height: 8rem;
+  padding: 0.55rem 0.45rem;
+}
+
+.composer textarea::placeholder {
+  color: #7a9188;
+}
+
+.composer button {
+  appearance: none;
+  border: 0;
+  cursor: pointer;
+  background: linear-gradient(145deg, var(--leaf) 0%, var(--leaf-deep) 100%);
+  color: #f7fbf8;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding: 0.7rem 1.15rem;
+  border-radius: 0.9rem;
+  transition: transform 160ms ease, filter 160ms ease, opacity 160ms ease;
+}
+
+.composer button:hover:not(:disabled) {
+  filter: brightness(1.06);
+  transform: translateY(-1px);
+}
+
+.composer button:disabled {
+  opacity: 0.55;
+  cursor: wait;
+}
+
+.status {
+  min-height: 1.2rem;
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+}
+
+.status.is-error {
+  color: var(--danger);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes bubbleIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes softPulse {
+  0%,
+  100% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes dot {
+  0%,
+  80%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.35;
+  }
+  40% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+@media (max-width: 560px) {
+  body {
+    overflow: auto;
+  }
+
+  .shell {
+    height: auto;
+    min-height: 100%;
+    padding-bottom: 1.5rem;
+  }
+
+  .chat {
+    min-height: 58vh;
+  }
+}

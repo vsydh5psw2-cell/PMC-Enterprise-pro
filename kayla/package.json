@@ -5,7 +5,8 @@
   "description": "Kayla — friendly chat assistant with durable notes",
   "scripts": {
     "check": "tsc --noEmit",
-    "dev": "bdk dev"
+    "dev": "bdk dev",
+    "ui": "node scripts/serve-ui.mjs"
   },
   "dependencies": {
     "@cursor/bdk": "^0.2.24",
