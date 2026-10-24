@@ -29,6 +29,11 @@ function addBubble(role, text) {
   return el;
 }
 
+function setBubbleText(el, text) {
+  el.textContent = text;
+  thread.scrollTop = thread.scrollHeight;
+}
+
 function addTyping() {
   const el = document.createElement("div");
   el.className = "bubble assistant";
@@ -101,14 +106,28 @@ async function fetchEvents() {
   const url = `${API_BASE}/session/${encodeURIComponent(state.sessionId)}/events?format=json`;
   const res = await fetch(url, { cache: "no-store" });
   if (!res.ok) {
-    throw new Error(httpErrorMessage(res.status, await res.json().catch(() => ({}))));
+    throw new Error(
+      httpErrorMessage(res.status, await res.json().catch(() => ({}))),
+    );
   }
   const data = await res.json();
   return Array.isArray(data.events) ? data.events : [];
 }
 
+function toolLabel(name) {
+  if (name === "save_note") return "حفظ ملاحظة…";
+  if (name === "recall_note" || name === "list_notes") return "قراءة الملاحظات…";
+  if (name === "web_search") return "أبحث في الويب…";
+  if (name === "web_fetch") return "أقرأ مصدراً…";
+  if (name === "now") return "أتحقق من الوقت…";
+  if (name === "calculate") return "أحسب…";
+  if (String(name).startsWith("reminders_")) return "تذكير…";
+  return `شغّالة: ${name}…`;
+}
+
 /**
- * Poll session events — more reliable than long SSE through mobile tunnels.
+ * Poll session events. message.appended chunks are deltas — always append.
+ * message.completed (non-tool) is the authoritative final text.
  * @param {HTMLElement} bubble
  */
 async function waitForReply(bubble) {
@@ -118,7 +137,7 @@ async function waitForReply(bubble) {
   let sawAssistant = false;
   let turnError = "";
   const shownTools = new Set();
-  const deadline = Date.now() + 120_000;
+  const deadline = Date.now() + 180_000;
 
   while (Date.now() < deadline) {
     const events = await fetchEvents();
@@ -132,45 +151,37 @@ async function waitForReply(bubble) {
       const type = event.type;
       const data = event.data ?? {};
 
-      if (type === "message.appended" && typeof data.text === "string") {
+      if (type === "message.appended") {
+        const chunk =
+          typeof data.delta === "string"
+            ? data.delta
+            : typeof data.text === "string"
+              ? data.text
+              : "";
+        if (!chunk) continue;
         if (!sawAssistant) {
           bubble.textContent = "";
           sawAssistant = true;
         }
-        // events dump is cumulative per message; prefer completed text when present
-        if (data.delta) {
-          text += data.delta;
-        } else if (data.text && data.text.length >= text.length) {
-          text = data.text;
-        } else {
-          text += data.text;
-        }
-        bubble.textContent = text;
-        thread.scrollTop = thread.scrollHeight;
+        text += chunk;
+        setBubbleText(bubble, text);
       }
 
       if (type === "message.completed" && typeof data.text === "string") {
         if (data.finishReason === "tool_call") continue;
-        text = data.text || text;
-        if (text) {
-          bubble.textContent = text;
-          sawAssistant = true;
-        }
+        text = data.text;
+        sawAssistant = true;
+        setBubbleText(bubble, text);
       }
 
       if (type === "actions.requested" && Array.isArray(data.calls)) {
         for (const call of data.calls) {
-          const id = call.callId || call.toolName;
+          const id = call.callId || `${call.toolName}-${event.index}`;
           if (shownTools.has(id)) continue;
           shownTools.add(id);
           const name = call.toolName || "أداة";
-          const label =
-            name === "save_note"
-              ? "حفظ ملاحظة…"
-              : name === "recall_note"
-                ? "استرجاع ملاحظة…"
-                : `تشغيل ${name}…`;
-          addBubble("tool", label);
+          addBubble("tool", toolLabel(name));
+          setStatus(toolLabel(name));
         }
       }
 
@@ -184,12 +195,29 @@ async function waitForReply(bubble) {
         type === "turn.failed"
       ) {
         if (turnError) throw new Error(humanizeAgentError(turnError));
+        // Final safety: re-scan for the latest completed assistant message
+        if (!text.trim()) {
+          for (let i = events.length - 1; i >= 0; i--) {
+            const e = events[i];
+            if (
+              e.type === "message.completed" &&
+              e.data?.finishReason !== "tool_call" &&
+              typeof e.data?.text === "string" &&
+              e.data.text.trim()
+            ) {
+              text = e.data.text;
+              sawAssistant = true;
+              setBubbleText(bubble, text);
+              break;
+            }
+          }
+        }
         if (!sawAssistant || !text.trim()) bubble.remove();
         return;
       }
     }
 
-    await new Promise((r) => setTimeout(r, 450));
+    await new Promise((r) => setTimeout(r, 400));
   }
 
   throw new Error("انتهى وقت انتظار الرد. أعيدي المحاولة.");
@@ -218,9 +246,9 @@ form.addEventListener("submit", async (event) => {
 
   try {
     await startOrContinue(message);
-    setStatus("Kayla ترد…");
+    setStatus("Kayla تفكّر…");
     await waitForReply(typing);
-    setStatus("متصلة");
+    setStatus("متصلة — وصلك الرد");
   } catch (err) {
     typing.remove();
     const msg =
