@@ -25,6 +25,7 @@
 html,
 body {
   height: 100%;
+  height: 100dvh;
 }
 
 body {
@@ -33,6 +34,7 @@ body {
   font-family: var(--font-body);
   background: var(--foam);
   overflow: hidden;
+  -webkit-text-size-adjust: 100%;
 }
 
 .sr-only {
@@ -75,6 +77,10 @@ body {
   max-width: 44rem;
   margin: 0 auto;
   padding: clamp(1.25rem, 4vw, 2.25rem);
+  padding-top: calc(clamp(1.25rem, 4vw, 2.25rem) + env(safe-area-inset-top, 0px));
+  padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+  padding-inline: calc(clamp(1rem, 4vw, 2.25rem) + env(safe-area-inset-left, 0px))
+    calc(clamp(1rem, 4vw, 2.25rem) + env(safe-area-inset-right, 0px));
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
   gap: 1.25rem;
@@ -321,17 +327,34 @@ body {
 }
 
 @media (max-width: 560px) {
-  body {
-    overflow: auto;
+  .brand {
+    font-size: clamp(2.2rem, 12vw, 3.2rem);
+  }
+
+  .lede {
+    font-size: 0.92rem;
   }
 
   .shell {
-    height: auto;
-    min-height: 100%;
-    padding-bottom: 1.5rem;
+    height: 100%;
+    min-height: 100dvh;
   }
 
   .chat {
-    min-height: 58vh;
+    min-height: 0;
+  }
+
+  .composer {
+    position: sticky;
+    bottom: 0;
+  }
+
+  .composer textarea {
+    font-size: 16px; /* avoid iOS zoom on focus */
+  }
+
+  .bubble {
+    max-width: 94%;
+    font-size: 0.95rem;
   }
 }

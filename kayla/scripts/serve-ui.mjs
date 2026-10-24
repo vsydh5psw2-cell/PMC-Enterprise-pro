@@ -17,6 +17,7 @@ const types = {
   ".svg": "image/svg+xml",
   ".png": "image/png",
   ".ico": "image/x-icon",
+  ".webmanifest": "application/manifest+json; charset=utf-8",
 };
 
 function send(res, status, body, headers = {}) {
