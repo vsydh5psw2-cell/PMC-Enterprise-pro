@@ -8,4 +8,8 @@ export default defineAgent({
       { id: "fast", value: "true" },
     ],
   },
+  // Personal assistant: allow the standard harness tool surface so Kayla
+  // can inspect her workspace when helpful (in addition to authored tools).
+  tools: ["read", "grep", "glob", "ls", "shell"],
+  builtinTools: { reminders: true },
 });
