@@ -54,6 +54,8 @@ async function proxy(req, res) {
   // BDK localDevStrict rejects browser cross-origin mutations. The UI is
   // same-origin to this proxy; strip browser CORS/fetch metadata so the
   // agent sees a plain loopback call.
+  // Strip browser + proxy metadata. BDK localDevStrict rejects
+  // forwarded / cross-origin mutation headers from tunnels (Cloudflare).
   for (const key of [
     "origin",
     "referer",
@@ -65,6 +67,18 @@ async function proxy(req, res) {
     "sec-ch-ua",
     "sec-ch-ua-mobile",
     "sec-ch-ua-platform",
+    "x-forwarded-for",
+    "x-forwarded-host",
+    "x-forwarded-proto",
+    "x-forwarded-port",
+    "x-real-ip",
+    "cf-connecting-ip",
+    "cf-ipcountry",
+    "cf-ray",
+    "cf-visitor",
+    "true-client-ip",
+    "forwarded",
+    "via",
   ]) {
     delete headers[key];
   }
