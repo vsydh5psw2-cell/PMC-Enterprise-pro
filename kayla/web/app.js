@@ -6,16 +6,14 @@ const input = document.getElementById("message");
 const sendBtn = document.getElementById("send");
 const statusEl = document.getElementById("status");
 
-/** @type {{ sessionId: string | null, continuationToken: string | null, streamIndex: number }} */
+/** @type {{ sessionId: string | null, continuationToken: string | null, seenIndex: number }} */
 const state = {
   sessionId: null,
   continuationToken: null,
-  streamIndex: 0,
+  seenIndex: -1,
 };
 
 let busy = false;
-/** @type {AbortController | null} */
-let streamAbort = null;
 
 function setStatus(text, isError = false) {
   statusEl.textContent = text;
@@ -35,7 +33,8 @@ function addTyping() {
   const el = document.createElement("div");
   el.className = "bubble assistant";
   el.dataset.typing = "1";
-  el.innerHTML = '<div class="typing" aria-label="تكتب…"><span></span><span></span><span></span></div>';
+  el.innerHTML =
+    '<div class="typing" aria-label="تكتب…"><span></span><span></span><span></span></div>';
   thread.appendChild(el);
   thread.scrollTop = thread.scrollHeight;
   return el;
@@ -54,6 +53,16 @@ input.addEventListener("keydown", (event) => {
     form.requestSubmit();
   }
 });
+
+function httpErrorMessage(status, data) {
+  if (data?.message) return data.message;
+  if (data?.error) return String(data.error);
+  if (status === 530 || status === 502 || status === 504) {
+    return "انقطع الاتصال مؤقتاً. انتظري ثانية وأعيدي الإرسال.";
+  }
+  if (status === 0) return "Load failed — تحققي من الشبكة وأعيدي المحاولة.";
+  return `تعذّر الإرسال (${status})`;
+}
 
 /**
  * @param {string} message
@@ -78,13 +87,7 @@ async function startOrContinue(message) {
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data.ok === false) {
-    const detail =
-      data.message ||
-      data.error ||
-      (res.status === 502
-        ? "السيرفر غير متاح. شغّلي `npm run dev` ثم أعيدي المحاولة."
-        : `تعذّر الإرسال (${res.status})`);
-    throw new Error(detail);
+    throw new Error(httpErrorMessage(res.status, data));
   }
 
   state.sessionId = data.sessionId ?? state.sessionId;
@@ -94,49 +97,37 @@ async function startOrContinue(message) {
   return data;
 }
 
+async function fetchEvents() {
+  const url = `${API_BASE}/session/${encodeURIComponent(state.sessionId)}/events?format=json`;
+  const res = await fetch(url, { cache: "no-store" });
+  if (!res.ok) {
+    throw new Error(httpErrorMessage(res.status, await res.json().catch(() => ({}))));
+  }
+  const data = await res.json();
+  return Array.isArray(data.events) ? data.events : [];
+}
+
 /**
+ * Poll session events — more reliable than long SSE through mobile tunnels.
  * @param {HTMLElement} bubble
  */
-async function listenStream(bubble) {
+async function waitForReply(bubble) {
   if (!state.sessionId) return;
 
-  streamAbort?.abort();
-  streamAbort = new AbortController();
-
-  const url = `${API_BASE}/session/${encodeURIComponent(state.sessionId)}/stream?startIndex=${state.streamIndex}`;
-  const res = await fetch(url, { signal: streamAbort.signal });
-  if (!res.ok || !res.body) {
-    throw new Error("تعذّر الاتصال ببث الرد.");
-  }
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
   let text = "";
   let sawAssistant = false;
-  let turnDone = false;
   let turnError = "";
+  const shownTools = new Set();
+  const deadline = Date.now() + 120_000;
 
-  while (!turnDone) {
-    const { value, done } = await reader.read();
-    if (done) break;
-    buffer += decoder.decode(value, { stream: true });
-    const lines = buffer.split("\n");
-    buffer = lines.pop() ?? "";
+  while (Date.now() < deadline) {
+    const events = await fetchEvents();
 
-    for (const line of lines) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      let event;
-      try {
-        event = JSON.parse(trimmed);
-      } catch {
+    for (const event of events) {
+      if (typeof event.index !== "number" || event.index <= state.seenIndex) {
         continue;
       }
-
-      if (typeof event.index === "number") {
-        state.streamIndex = Math.max(state.streamIndex, event.index + 1);
-      }
+      state.seenIndex = event.index;
 
       const type = event.type;
       const data = event.data ?? {};
@@ -146,7 +137,14 @@ async function listenStream(bubble) {
           bubble.textContent = "";
           sawAssistant = true;
         }
-        text += data.text;
+        // events dump is cumulative per message; prefer completed text when present
+        if (data.delta) {
+          text += data.delta;
+        } else if (data.text && data.text.length >= text.length) {
+          text = data.text;
+        } else {
+          text += data.text;
+        }
         bubble.textContent = text;
         thread.scrollTop = thread.scrollHeight;
       }
@@ -162,6 +160,9 @@ async function listenStream(bubble) {
 
       if (type === "actions.requested" && Array.isArray(data.calls)) {
         for (const call of data.calls) {
+          const id = call.callId || call.toolName;
+          if (shownTools.has(id)) continue;
+          shownTools.add(id);
           const name = call.toolName || "أداة";
           const label =
             name === "save_note"
@@ -175,24 +176,23 @@ async function listenStream(bubble) {
 
       if (type === "turn.failed") {
         turnError = data.message || "فشلت الجولة.";
-        turnDone = true;
       }
 
-      if (type === "turn.completed" || type === "session.waiting") {
-        turnDone = true;
+      if (
+        type === "turn.completed" ||
+        type === "session.waiting" ||
+        type === "turn.failed"
+      ) {
+        if (turnError) throw new Error(humanizeAgentError(turnError));
+        if (!sawAssistant || !text.trim()) bubble.remove();
+        return;
       }
     }
+
+    await new Promise((r) => setTimeout(r, 450));
   }
 
-  reader.cancel().catch(() => {});
-
-  if (turnError) {
-    throw new Error(humanizeAgentError(turnError));
-  }
-
-  if (!sawAssistant || !text.trim()) {
-    bubble.remove();
-  }
+  throw new Error("انتهى وقت انتظار الرد. أعيدي المحاولة.");
 }
 
 function humanizeAgentError(raw) {
@@ -209,7 +209,7 @@ form.addEventListener("submit", async (event) => {
 
   busy = true;
   sendBtn.disabled = true;
-  setStatus("");
+  setStatus("جارٍ الإرسال…");
   addBubble("user", message);
   input.value = "";
   resizeInput();
@@ -218,11 +218,17 @@ form.addEventListener("submit", async (event) => {
 
   try {
     await startOrContinue(message);
-    await listenStream(typing);
-    setStatus(state.sessionId ? `جلسة ${state.sessionId.slice(0, 12)}…` : "");
+    setStatus("Kayla ترد…");
+    await waitForReply(typing);
+    setStatus("متصلة");
   } catch (err) {
     typing.remove();
-    const msg = err instanceof Error ? err.message : "حدث خطأ غير متوقع.";
+    const msg =
+      err instanceof TypeError
+        ? "Load failed — انقطع الاتصال. أعيدي المحاولة."
+        : err instanceof Error
+          ? err.message
+          : "حدث خطأ غير متوقع.";
     addBubble("error", msg);
     setStatus(msg, true);
   } finally {
@@ -236,12 +242,9 @@ async function probe() {
   try {
     const res = await fetch(`${API_BASE}/info`);
     if (!res.ok) throw new Error("offline");
-    setStatus("متصلة بالوكيل");
+    setStatus("متصلة — جاهزة على الموبايل");
   } catch {
-    setStatus(
-      "الوكيل غير متصل — شغّلي `npm run dev` في طرفية، و`npm run ui` في أخرى.",
-      true,
-    );
+    setStatus("غير متصلة الآن. أعيدي تحميل الصفحة بعد لحظات.", true);
   }
 }
 
