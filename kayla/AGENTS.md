@@ -18,9 +18,13 @@ Arabic chat UI (separate from the BDK playground):
 
 ```bash
 npm run dev          # agent on :3000
-npm run ui           # UI on :4173, proxies /v1 → agent
-# open http://127.0.0.1:4173
+npm run ui           # UI on 0.0.0.0:4173, proxies /v1 → agent
 ```
+
+From a Cloud Agent: do **not** open `127.0.0.1:4173` in a normal browser —
+that is the VM loopback. In Cursor Desktop use **Forwarded Ports** → forward
+**4173** → Open in browser (or use the agent **Try Live** remote desktop).
+Locally on your machine, `http://127.0.0.1:4173` works after both commands.
 
 Run the CLI under Node, never Bun.
 

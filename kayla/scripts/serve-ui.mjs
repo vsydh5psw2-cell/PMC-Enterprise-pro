@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webRoot = path.resolve(__dirname, "../web");
 const port = Number(process.env.UI_PORT || 4173);
+const host = process.env.UI_HOST || "0.0.0.0";
 const agentOrigin = process.env.BDK_ORIGIN || "http://127.0.0.1:3000";
 
 const types = {
@@ -19,6 +20,7 @@ const types = {
 };
 
 function send(res, status, body, headers = {}) {
+  if (res.headersSent || res.writableEnded) return;
   res.writeHead(status, headers);
   res.end(body);
 }
@@ -66,6 +68,11 @@ async function proxy(req, res) {
     delete headers[key];
   }
 
+  const onClose = () => {
+    req.destroy();
+  };
+  res.on("close", onClose);
+
   try {
     const upstream = await fetch(target, {
       method: req.method,
@@ -74,6 +81,8 @@ async function proxy(req, res) {
       duplex: "half",
       redirect: "manual",
     });
+
+    if (res.headersSent || res.writableEnded) return;
 
     const outHeaders = {};
     upstream.headers.forEach((value, key) => {
@@ -86,12 +95,22 @@ async function proxy(req, res) {
       return;
     }
     const reader = upstream.body.getReader();
-    for (;;) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      res.write(Buffer.from(value));
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (res.writableEnded) {
+          await reader.cancel().catch(() => {});
+          break;
+        }
+        const ok = res.write(Buffer.from(value));
+        if (!ok) {
+          await new Promise((resolve) => res.once("drain", resolve));
+        }
+      }
+    } finally {
+      if (!res.writableEnded) res.end();
     }
-    res.end();
   } catch (err) {
     const message = err instanceof Error ? err.message : "proxy error";
     send(
@@ -104,6 +123,8 @@ async function proxy(req, res) {
       }),
       { "content-type": "application/json; charset=utf-8" },
     );
+  } finally {
+    res.off("close", onClose);
   }
 }
 
@@ -115,7 +136,8 @@ const server = http.createServer((req, res) => {
   serveStatic(req, res);
 });
 
-server.listen(port, "127.0.0.1", () => {
-  console.log(`Kayla UI  http://127.0.0.1:${port}`);
+server.listen(port, host, () => {
+  console.log(`Kayla UI  http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${port}`);
+  console.log(`Listening on ${host}:${port} (forward this port in Cursor Desktop)`);
   console.log(`Proxying  /v1 → ${agentOrigin}/v1`);
 });
