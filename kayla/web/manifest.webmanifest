@@ -1,0 +1,19 @@
+{
+  "name": "Kayla",
+  "short_name": "Kayla",
+  "description": "محادثتك بهدوء ووضوح",
+  "start_url": "/",
+  "display": "standalone",
+  "dir": "rtl",
+  "lang": "ar",
+  "background_color": "#eef4ef",
+  "theme_color": "#1e4a3e",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

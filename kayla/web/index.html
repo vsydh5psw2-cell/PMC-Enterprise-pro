@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#1e4a3e" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="Kayla" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta
+      name="description"
+      content="Kayla — محادثتك بهدوء ووضوح على الموبايل."
+    />
+    <title>Kayla</title>
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
+    <link rel="icon" href="/icon.svg" type="image/svg+xml" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Cairo:wght@500;700;800&family=IBM+Plex+Sans+Arabic:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="atmosphere" aria-hidden="true"></div>
+    <div class="grain" aria-hidden="true"></div>
+
+    <main class="shell">
+      <header class="brand-block">
+        <p class="brand" id="brand">Kayla</p>
+        <h1 class="headline">محادثتك، بهدوء ووضوح.</h1>
+        <p class="lede">
+          احفظ ملاحظاتك، اسأل بحرية، وخلّي Kayla تتذكر اللي يهمك.
+        </p>
+      </header>
+
+      <section class="chat" aria-label="محادثة Kayla">
+        <div class="thread" id="thread" role="log" aria-live="polite"></div>
+
+        <form class="composer" id="composer">
+          <label class="sr-only" for="message">رسالتك</label>
+          <textarea
+            id="message"
+            name="message"
+            rows="1"
+            placeholder="اكتبي رسالتك…"
+            autocomplete="off"
+            required
+          ></textarea>
+          <button type="submit" id="send" aria-label="إرسال">
+            <span>إرسال</span>
+          </button>
+        </form>
+        <p class="status" id="status" role="status"></p>
+      </section>
+    </main>
+
+    <script type="module" src="/app.js?v=3"></script>
+  </body>
+</html>
