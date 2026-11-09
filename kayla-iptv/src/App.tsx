@@ -1,25 +1,35 @@
 import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
-import { categories, channels, type Channel } from './data/channels'
+import type { Channel } from './data/channels'
 import { useTvNav } from './hooks/useTvNav'
 import { Player } from './components/Player'
+import { Settings } from './components/Settings'
+import { categoriesFromChannels } from './lib/m3u'
+import { activeCatalog } from './lib/playlistStore'
 import './index.css'
 
 const GRID_COLS = 4
 
 function App() {
+  const initial = activeCatalog()
+  const [channelList, setChannelList] = useState<Channel[]>(initial.channels)
+  const [sourceLabel, setSourceLabel] = useState(initial.sourceLabel)
+  const [isDemo, setIsDemo] = useState(initial.isDemo)
   const [categoryId, setCategoryId] = useState('all')
   const [active, setActive] = useState<Channel | null>(null)
+  const [showSettings, setShowSettings] = useState(false)
+
+  const cats = useMemo(() => categoriesFromChannels(channelList), [channelList])
 
   const filtered = useMemo(() => {
-    if (categoryId === 'all') return channels
-    return channels.filter((c) => c.category === categoryId)
-  }, [categoryId])
+    if (categoryId === 'all') return channelList
+    return channelList.filter((c) => c.category === categoryId)
+  }, [categoryId, channelList])
 
   const { focusIndex, setFocusIndex } = useTvNav({
     columns: GRID_COLS,
     itemCount: filtered.length,
-    enabled: !active,
+    enabled: !active && !showSettings,
     onSelect: (index) => {
       const ch = filtered[index]
       if (ch) setActive(ch)
@@ -30,6 +40,29 @@ function App() {
     return <Player channel={active} onBack={() => setActive(null)} />
   }
 
+  if (showSettings) {
+    return (
+      <Settings
+        onClose={() => setShowSettings(false)}
+        onLoaded={(channels, label) => {
+          setChannelList(channels)
+          setSourceLabel(label)
+          setIsDemo(false)
+          setCategoryId('all')
+          setFocusIndex(0)
+        }}
+        onCleared={() => {
+          const next = activeCatalog()
+          setChannelList(next.channels)
+          setSourceLabel(next.sourceLabel)
+          setIsDemo(next.isDemo)
+          setCategoryId('all')
+          setFocusIndex(0)
+        }}
+      />
+    )
+  }
+
   return (
     <div className="app">
       <header className="topbar">
@@ -37,11 +70,24 @@ function App() {
           <span className="brand-mark">Kayla</span>
           <span className="brand-iptv">IPTV</span>
         </div>
-        <p className="topbar-note">واجهة تلفزيون · بث تجريبي عام فقط</p>
+        <div className="topbar-actions">
+          <p className="topbar-note">
+            {isDemo
+              ? 'بث تجريبي · أضف قائمتك من الإعدادات'
+              : `${channelList.length} قناة · ${sourceLabel}`}
+          </p>
+          <button
+            type="button"
+            className="tv-btn topbar-settings"
+            onClick={() => setShowSettings(true)}
+          >
+            إضافة قنوات
+          </button>
+        </div>
       </header>
 
       <nav className="cats" aria-label="التصنيفات">
-        {categories.map((cat) => (
+        {cats.map((cat) => (
           <button
             key={cat.id}
             type="button"
@@ -57,6 +103,9 @@ function App() {
       </nav>
 
       <main className="grid" style={{ ['--cols' as string]: GRID_COLS }}>
+        {filtered.length === 0 && (
+          <p className="empty-grid">لا قنوات في هذا التصنيف</p>
+        )}
         {filtered.map((channel, index) => {
           const focused = index === focusIndex
           return (
@@ -70,7 +119,7 @@ function App() {
               onClick={() => setActive(channel)}
               initial={{ opacity: 0, y: 16 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, delay: index * 0.03 }}
+              transition={{ duration: 0.25, delay: Math.min(index, 24) * 0.02 }}
             >
               <span className="tile-glow" aria-hidden />
               <span className="tile-cat">{channel.categoryAr}</span>
@@ -85,6 +134,7 @@ function App() {
         <span>↑↓←→ تنقل</span>
         <span>Enter تشغيل</span>
         <span>Esc رجوع</span>
+        <span>إضافة قنوات ← قائمتك</span>
       </footer>
     </div>
   )
