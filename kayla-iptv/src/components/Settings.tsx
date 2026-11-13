@@ -14,11 +14,12 @@ type Props = {
   onCleared: () => void
 }
 
-type Tab = 'm3u-url' | 'm3u-file' | 'xtream'
+type Tab = 'xtream' | 'm3u-file' | 'm3u-paste' | 'm3u-url'
 
 export function Settings({ onClose, onLoaded, onCleared }: Props) {
   const [tab, setTab] = useState<Tab>('xtream')
   const [m3uUrl, setM3uUrl] = useState('')
+  const [m3uText, setM3uText] = useState('')
   const [server, setServer] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -46,6 +47,9 @@ export function Settings({ onClose, onLoaded, onCleared }: Props) {
         if (!url) throw new Error('أدخل رابط M3U')
         const text = await fetchPlaylistText(url)
         await applyChannels(parseM3u(text), 'M3U')
+      } else if (tab === 'm3u-paste') {
+        if (!m3uText.trim()) throw new Error('الصق محتوى ملف M3U')
+        await applyChannels(parseM3u(m3uText), 'M3U (لصق)')
       } else if (tab === 'xtream') {
         if (!server.trim() || !username.trim() || !password.trim()) {
           throw new Error('أكمل بيانات Xtream')
@@ -54,7 +58,8 @@ export function Settings({ onClose, onLoaded, onCleared }: Props) {
         await applyChannels(channels, 'Xtream')
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'فشل التحميل')
+      const msg = e instanceof Error ? e.message : 'فشل التحميل'
+      setError(msg === 'Load failed' ? 'فشل التحميل من المزود' : msg)
     } finally {
       setBusy(false)
     }
@@ -95,7 +100,7 @@ export function Settings({ onClose, onLoaded, onCleared }: Props) {
         </button>
         <div>
           <h1>اشتراك المزود</h1>
-          <p>أدخل Xtream أو ارفع/الصق قائمة M3U الخاصة بك.</p>
+          <p>الأضمن على الموبايل: افتح رابط القائمة ثم ارفع الملف.</p>
         </div>
       </header>
 
@@ -103,8 +108,9 @@ export function Settings({ onClose, onLoaded, onCleared }: Props) {
         {(
           [
             ['xtream', 'Xtream'],
-            ['m3u-url', 'رابط M3U'],
             ['m3u-file', 'رفع ملف'],
+            ['m3u-paste', 'لصق M3U'],
+            ['m3u-url', 'رابط M3U'],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -134,6 +140,19 @@ export function Settings({ onClose, onLoaded, onCleared }: Props) {
           </label>
         )}
 
+        {tab === 'm3u-paste' && (
+          <label className="field">
+            <span>الصق محتوى ملف M3U</span>
+            <textarea
+              value={m3uText}
+              onChange={(e) => setM3uText(e.target.value)}
+              placeholder={'#EXTM3U\n#EXTINF:-1,قناة\nhttp://...'}
+              rows={10}
+              spellCheck={false}
+            />
+          </label>
+        )}
+
         {tab === 'm3u-file' && (
           <label className="field">
             <span>اختر ملف M3U من الجوال</span>
@@ -152,7 +171,7 @@ export function Settings({ onClose, onLoaded, onCleared }: Props) {
               <input
                 value={server}
                 onChange={(e) => setServer(e.target.value)}
-                placeholder="host:port أو https://host:port"
+                placeholder="https://host:port"
                 autoComplete="off"
                 spellCheck={false}
               />
@@ -175,13 +194,14 @@ export function Settings({ onClose, onLoaded, onCleared }: Props) {
               />
             </label>
             {xtreamDownload && (
-              <p className="settings-note">
-                إذا فشل التحميل:{' '}
-                <a href={xtreamDownload} target="_blank" rel="noreferrer">
-                  افتح رابط القائمة
-                </a>{' '}
-                ثم استخدم تبويب «رفع ملف».
-              </p>
+              <a
+                className="btn btn-ghost"
+                href={xtreamDownload}
+                target="_blank"
+                rel="noreferrer"
+              >
+                فتح رابط القائمة للتحميل
+              </a>
             )}
           </div>
         )}
@@ -222,8 +242,8 @@ export function Settings({ onClose, onLoaded, onCleared }: Props) {
         {error && <p className="settings-err">{error}</p>}
 
         <p className="settings-note">
-          لا ترسل بيانات الاشتراك في الدردشة. التحميل يمر عبر بروكسي التطبيق لتجاوز
-          حظر المتصفح (CORS).
+          لا تشارك السيرفر أو كلمة المرور في الدردشة أو لقطات الشاشة. إن ظهرت في
+          صورة، غيّر كلمة المرور عند المزود.
         </p>
       </div>
     </div>

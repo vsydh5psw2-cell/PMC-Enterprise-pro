@@ -78,10 +78,13 @@ export function parseM3u(text: string): Channel[] {
   return out
 }
 
+/**
+ * Keep the scheme the user typed. If omitted, use HTTPS only —
+ * never silently downgrade to cleartext HTTP with credentials.
+ */
 export function normalizeServerBase(server: string): string {
   const trimmed = server.trim().replace(/\/+$/, '')
   if (/^https?:\/\//i.test(trimmed)) return trimmed
-  // Prefer HTTPS to avoid sending credentials over cleartext when possible.
   return `https://${trimmed}`
 }
 
@@ -160,77 +163,28 @@ function assertM3u(text: string) {
   return text
 }
 
-async function fetchTextDirect(url: string): Promise<string> {
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.text()
-}
-
-/** Fetch via same-origin proxy first (avoids CORS), then direct fetch. */
+/** Browser-only fetch (no server proxy — avoids SSRF). May fail when the provider blocks CORS. */
 export async function fetchPlaylistText(url: string): Promise<string> {
   try {
-    const res = await fetch('/api/fetch-playlist', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ url }),
-    })
-    if (res.ok) {
-      const data = (await res.json()) as { text?: string; error?: string }
-      return assertM3u(data.text || '')
-    }
-    // Static hosts may 404 the API — fall through to direct fetch.
-    if (res.status !== 404) {
-      const data = (await res.json().catch(() => ({}))) as { error?: string }
-      throw new Error(data.error || `HTTP ${res.status}`)
-    }
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(`المزود أرجع HTTP ${res.status}`)
+    return assertM3u(await res.text())
   } catch (err) {
-    if (err instanceof Error && !/Failed to fetch|NetworkError|404/i.test(err.message)) {
-      // keep going to direct only for network/missing-proxy cases; rethrow app errors
-      if (!/HTTP|رابط|قائمة|مهلة|السيرفر/i.test(err.message)) {
-        // fall through
-      } else if (!/Failed to fetch|NetworkError/i.test(err.message)) {
-        throw err
-      }
-    }
-  }
-
-  try {
-    return assertM3u(await fetchTextDirect(url))
-  } catch {
+    if (err instanceof Error && /M3U|HTTP|قائمة/i.test(err.message)) throw err
     throw new Error(
-      'تعذّر جلب القائمة من المتصفح. استخدم تبويب «رفع ملف» بعد تحميل M3U من المزود.',
+      'المتصفح منع تحميل القائمة (CORS). افتح رابط التحميل ثم استخدم «رفع ملف» أو «لصق M3U».',
     )
   }
 }
 
-export async function fetchJsonViaProxy(url: string): Promise<unknown> {
-  const text = await (async () => {
-    try {
-      const res = await fetch('/api/fetch-playlist', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
-      })
-      if (res.ok) {
-        const data = (await res.json()) as { text?: string }
-        return data.text || ''
-      }
-      if (res.status !== 404) {
-        const data = (await res.json().catch(() => ({}))) as { error?: string }
-        throw new Error(data.error || `HTTP ${res.status}`)
-      }
-    } catch (err) {
-      if (err instanceof Error && /HTTP|مهلة|السيرفر|JSON/i.test(err.message)) {
-        if (!/Failed to fetch|NetworkError/i.test(err.message)) throw err
-      }
-    }
-    return fetchTextDirect(url)
-  })()
-
+export async function fetchJsonDirect(url: string): Promise<unknown> {
   try {
-    return JSON.parse(text)
-  } catch {
-    throw new Error('رد المزود ليس JSON صالحاً')
+    const res = await fetch(url)
+    if (!res.ok) throw new Error(`المزود أرجع HTTP ${res.status}`)
+    return await res.json()
+  } catch (err) {
+    if (err instanceof Error && /HTTP|JSON/i.test(err.message)) throw err
+    throw new Error('تعذّر قراءة بيانات المزود من المتصفح')
   }
 }
 
@@ -239,13 +193,13 @@ export async function loadXtreamChannels(
   username: string,
   password: string,
 ): Promise<Channel[]> {
-  // 1) Prefer player_api JSON (smaller, structured)
+  // Try player_api in the browser (works only if provider allows CORS).
   try {
     const catsUrl = buildXtreamApiUrl(server, username, password, 'get_live_categories')
     const streamsUrl = buildXtreamApiUrl(server, username, password, 'get_live_streams')
     const [cats, streams] = await Promise.all([
-      fetchJsonViaProxy(catsUrl),
-      fetchJsonViaProxy(streamsUrl),
+      fetchJsonDirect(catsUrl),
+      fetchJsonDirect(streamsUrl),
     ])
     if (Array.isArray(streams) && streams.length) {
       const channels = channelsFromXtreamLive(
@@ -258,26 +212,23 @@ export async function loadXtreamChannels(
       if (channels.length) return channels
     }
   } catch {
-    // fall through to M3U
+    // fall through
   }
 
-  // 2) Fallback: full M3U playlist (https first, then http if needed)
-  const httpsUrl = buildXtreamM3uUrl(server, username, password, 'm3u8')
+  // Try M3U with the same scheme the user provided (no silent HTTP downgrade).
   try {
-    const text = await fetchPlaylistText(httpsUrl)
+    const text = await fetchPlaylistText(
+      buildXtreamM3uUrl(server, username, password, 'm3u8'),
+    )
     const channels = parseM3u(text)
     if (channels.length) return channels
-  } catch (httpsErr) {
-    const httpBase = normalizeServerBase(server).replace(/^https:/i, 'http:')
-    if (httpBase === normalizeServerBase(server)) throw httpsErr
-    const httpUrl = buildXtreamM3uUrl(httpBase, username, password, 'ts')
-    const text = await fetchPlaylistText(httpUrl)
-    const channels = parseM3u(text)
-    if (channels.length) return channels
-    throw httpsErr
+  } catch {
+    // fall through to guided upload
   }
 
-  throw new Error('لم يتم العثور على قنوات من المزود')
+  throw new Error(
+    'المتصفح لا يستطيع سحب القنوات مباشرة من هذا المزود. اضغط «فتح رابط القائمة» ثم ارفع الملف من تبويب رفع ملف.',
+  )
 }
 
 export function categoriesFromChannels(list: Channel[]) {
