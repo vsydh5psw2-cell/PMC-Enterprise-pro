@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
 import Hls from 'hls.js'
+import mpegts from 'mpegts.js'
 import type { Channel } from '../data/channels'
 
 type Props = {
   channel: Channel
   onBack: () => void
+}
+
+function isHlsUrl(url: string) {
+  return /\.m3u8(\?|$)/i.test(url) || /\/hls\//i.test(url)
 }
 
 export function Player({ channel, onBack }: Props) {
@@ -19,47 +24,79 @@ export function Player({ channel, onBack }: Props) {
     setStatus('loading')
     setErrorMsg('')
     let hls: Hls | null = null
+    let tsPlayer: mpegts.Player | null = null
 
     const onPlaying = () => setStatus('playing')
-    const onError = () => {
+    const fail = (msg: string) => {
       setStatus('error')
-      setErrorMsg('تعذّر تشغيل البث التجريبي')
+      setErrorMsg(msg)
     }
 
     video.addEventListener('playing', onPlaying)
-    video.addEventListener('error', onError)
 
-    if (Hls.isSupported()) {
-      hls = new Hls({ enableWorker: true })
-      hls.loadSource(channel.streamUrl)
-      hls.attachMedia(video)
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        void video.play().catch(() => {
-          setStatus('error')
-          setErrorMsg('اضغط تشغيل على الشاشة أو Enter')
-        })
-      })
-      hls.on(Hls.Events.ERROR, (_e, data) => {
-        if (data.fatal) {
-          setStatus('error')
-          setErrorMsg('فشل تحميل البث التجريبي')
-        }
-      })
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    const playNative = () => {
       video.src = channel.streamUrl
-      void video.play().catch(() => {
-        setStatus('error')
-        setErrorMsg('اضغط تشغيل على الشاشة أو Enter')
-      })
-    } else {
-      setStatus('error')
-      setErrorMsg('المتصفح لا يدعم HLS')
+      void video.play().catch(() => fail('اضغط تشغيل أو Enter'))
+    }
+
+    const playHls = () => {
+      if (Hls.isSupported()) {
+        hls = new Hls({ enableWorker: true })
+        hls.loadSource(channel.streamUrl)
+        hls.attachMedia(video)
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          void video.play().catch(() => fail('اضغط تشغيل أو Enter'))
+        })
+        hls.on(Hls.Events.ERROR, (_e, data) => {
+          if (data.fatal) fail('فشل تشغيل بث HLS')
+        })
+        return
+      }
+      if (video.canPlayType('application/vnd.apple.mpegurl')) {
+        playNative()
+        return
+      }
+      fail('المتصفح لا يدعم HLS')
+    }
+
+    const playMpegTs = () => {
+      if (!mpegts.getFeatureList().mseLivePlayback) {
+        playNative()
+        return
+      }
+      tsPlayer = mpegts.createPlayer(
+        {
+          type: 'mpegts',
+          isLive: true,
+          url: channel.streamUrl,
+        },
+        {
+          enableWorker: true,
+          liveBufferLatencyChasing: true,
+        },
+      )
+      tsPlayer.attachMediaElement(video)
+      tsPlayer.load()
+      void video.play().catch(() => fail('اضغط تشغيل أو Enter'))
+      tsPlayer.on(mpegts.Events.ERROR, () => fail('فشل تشغيل بث MPEG-TS'))
+    }
+
+    try {
+      if (isHlsUrl(channel.streamUrl)) playHls()
+      else playMpegTs()
+    } catch {
+      fail('تعذّر تهيئة المشغّل')
     }
 
     return () => {
       video.removeEventListener('playing', onPlaying)
-      video.removeEventListener('error', onError)
       hls?.destroy()
+      if (tsPlayer) {
+        tsPlayer.pause()
+        tsPlayer.unload()
+        tsPlayer.detachMediaElement()
+        tsPlayer.destroy()
+      }
       video.removeAttribute('src')
       video.load()
     }
@@ -92,7 +129,6 @@ export function Player({ channel, onBack }: Props) {
         controls
         playsInline
         autoPlay
-        poster=""
       />
 
       <div className="player-chrome">
@@ -108,7 +144,7 @@ export function Player({ channel, onBack }: Props) {
         {status === 'error' && <p className="player-status is-error">{errorMsg}</p>}
       </div>
 
-      <p className="player-hint">Enter تشغيل/إيقاف · Esc رجوع · أسهم للتنقل في القائمة</p>
+      <p className="player-hint">Enter تشغيل/إيقاف · Esc رجوع</p>
     </div>
   )
 }
