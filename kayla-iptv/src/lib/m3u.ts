@@ -140,7 +140,8 @@ export function channelsFromXtreamLive(
     const name = String(s.name ?? `قناة ${index + 1}`)
     const categoryId = String(s.category_id ?? '')
     const group = catMap.get(categoryId) || 'مباشر'
-    const streamUrl = `${base}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.m3u8`
+    // Prefer MPEG-TS live endpoints; Player falls back to .m3u8 when needed.
+    const streamUrl = `${base}/live/${encodeURIComponent(username)}/${encodeURIComponent(password)}/${streamId}.ts`
     out.push({
       id: `xt-${streamId}`,
       name,
