@@ -66,24 +66,24 @@ function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div className="brand">
-          <span className="brand-mark">Kayla</span>
-          <span className="brand-iptv">IPTV</span>
-        </div>
-        <div className="topbar-actions">
+        <div className="topbar-row">
+          <div className="brand">
+            <span className="brand-mark">Kayla</span>
+            <span className="brand-iptv">IPTV</span>
+          </div>
           <p className="topbar-note">
             {isDemo
-              ? 'بث تجريبي · أضف قائمتك من الإعدادات'
+              ? 'تجريبي — اضغط إضافة قنوات لاشتراكك'
               : `${channelList.length} قناة · ${sourceLabel}`}
           </p>
-          <button
-            type="button"
-            className="tv-btn topbar-settings"
-            onClick={() => setShowSettings(true)}
-          >
-            إضافة قنوات
-          </button>
         </div>
+        <button
+          type="button"
+          className="btn btn-primary add-channels-btn"
+          onClick={() => setShowSettings(true)}
+        >
+          إضافة قنوات / اشتراك المزود
+        </button>
       </header>
 
       <nav className="cats" aria-label="التصنيفات">
