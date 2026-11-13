@@ -4,6 +4,8 @@ import { demoChannels } from '../data/channels'
 
 const KEY = 'kayla-iptv-playlist-v2'
 const LEGACY_KEY = 'kayla-iptv-playlist-v1'
+const BOOT_GUARD = 'kayla-boot-guard'
+const MAX_CHANNELS = 5000
 
 export type StoredPlaylist = {
   sourceLabel: string
@@ -11,28 +13,61 @@ export type StoredPlaylist = {
   savedAt: string
 }
 
+/** If Safari crash-loops, clear heavy playlist on the next quick reload. */
+export async function recoverFromCrashLoop(): Promise<boolean> {
+  try {
+    const now = Date.now()
+    const prev = Number(sessionStorage.getItem(BOOT_GUARD) || '0')
+    sessionStorage.setItem(BOOT_GUARD, String(now))
+    if (prev && now - prev < 12000) {
+      await clearPlaylist()
+      sessionStorage.removeItem(BOOT_GUARD)
+      return true
+    }
+    window.setTimeout(() => {
+      try {
+        sessionStorage.removeItem(BOOT_GUARD)
+      } catch {
+        // ignore
+      }
+    }, 8000)
+  } catch {
+    // ignore
+  }
+  return false
+}
+
 export async function loadPlaylist(): Promise<StoredPlaylist | null> {
   try {
     const stored = await get<StoredPlaylist>(KEY)
-    if (stored?.channels?.length) return stored
+    if (stored?.channels?.length) {
+      if (stored.channels.length > MAX_CHANNELS) {
+        return {
+          ...stored,
+          channels: stored.channels.slice(0, MAX_CHANNELS),
+        }
+      }
+      return stored
+    }
 
-    // Migrate old localStorage playlist if present.
     const raw = localStorage.getItem(LEGACY_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as StoredPlaylist
     if (!parsed?.channels?.length) return null
-    await savePlaylist(parsed.sourceLabel, parsed.channels)
+    const clipped = parsed.channels.slice(0, MAX_CHANNELS)
+    await savePlaylist(parsed.sourceLabel, clipped)
     localStorage.removeItem(LEGACY_KEY)
-    return parsed
+    return { ...parsed, channels: clipped }
   } catch {
     return null
   }
 }
 
 export async function savePlaylist(sourceLabel: string, channels: Channel[]) {
+  const clipped = channels.slice(0, MAX_CHANNELS)
   const payload: StoredPlaylist = {
     sourceLabel,
-    channels,
+    channels: clipped,
     savedAt: new Date().toISOString(),
   }
   try {
@@ -41,35 +76,47 @@ export async function savePlaylist(sourceLabel: string, channels: Channel[]) {
     const name = err instanceof DOMException ? err.name : ''
     if (name === 'QuotaExceededError' || /quota/i.test(String(err))) {
       throw new Error(
-        'القائمة كبيرة جداً للتخزين على الجهاز. جرّب قائمة أقصر أو تصفية المجموعات.',
+        'القائمة كبيرة جداً للتخزين على الجهاز. جرّب رفع ملف أصغر أو لصق جزء منه.',
       )
     }
     throw err
   }
-  return payload
+  return {
+    payload,
+    truncated: channels.length > MAX_CHANNELS,
+    savedCount: clipped.length,
+  }
 }
 
 export async function clearPlaylist() {
   await del(KEY)
-  localStorage.removeItem(LEGACY_KEY)
+  try {
+    localStorage.removeItem(LEGACY_KEY)
+  } catch {
+    // ignore
+  }
 }
 
 export async function activeCatalog(): Promise<{
   channels: Channel[]
   sourceLabel: string
   isDemo: boolean
+  recovered: boolean
 }> {
-  const stored = await loadPlaylist()
+  const recovered = await recoverFromCrashLoop()
+  const stored = recovered ? null : await loadPlaylist()
   if (stored?.channels.length) {
     return {
       channels: stored.channels,
       sourceLabel: stored.sourceLabel,
       isDemo: false,
+      recovered,
     }
   }
   return {
     channels: demoChannels,
     sourceLabel: 'تجريبي',
     isDemo: true,
+    recovered,
   }
 }

@@ -31,9 +31,13 @@ export function Settings({ onClose, onLoaded, onCleared }: Props) {
     if (!channels.length) {
       throw new Error('لم يتم العثور على قنوات في القائمة')
     }
-    await savePlaylist(label, channels)
-    onLoaded(channels, label)
-    setMessage(`تم الاشتراك — ${channels.length} قناة`)
+    const result = await savePlaylist(label, channels)
+    onLoaded(result.payload.channels, label)
+    setMessage(
+      result.truncated
+        ? `تم الاشتراك — حفظ ${result.savedCount} قناة (تم قص القائمة لأنها كبيرة)`
+        : `تم الاشتراك — ${result.savedCount} قناة`,
+    )
     setError(null)
   }
 
