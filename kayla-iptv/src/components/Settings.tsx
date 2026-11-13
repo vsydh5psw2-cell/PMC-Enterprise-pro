@@ -2,6 +2,7 @@ import { useState } from 'react'
 import {
   buildXtreamM3uUrl,
   fetchPlaylistText,
+  loadXtreamChannels,
   parseM3u,
 } from '../lib/m3u'
 import { clearPlaylist, savePlaylist } from '../lib/playlistStore'
@@ -13,12 +14,11 @@ type Props = {
   onCleared: () => void
 }
 
-type Tab = 'm3u-url' | 'm3u-paste' | 'xtream'
+type Tab = 'm3u-url' | 'm3u-file' | 'xtream'
 
 export function Settings({ onClose, onLoaded, onCleared }: Props) {
-  const [tab, setTab] = useState<Tab>('m3u-url')
+  const [tab, setTab] = useState<Tab>('xtream')
   const [m3uUrl, setM3uUrl] = useState('')
-  const [m3uText, setM3uText] = useState('')
   const [server, setServer] = useState('')
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
@@ -26,14 +26,13 @@ export function Settings({ onClose, onLoaded, onCleared }: Props) {
   const [message, setMessage] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  async function applyText(text: string, label: string) {
-    const channels = parseM3u(text)
+  async function applyChannels(channels: Channel[], label: string) {
     if (!channels.length) {
       throw new Error('لم يتم العثور على قنوات في القائمة')
     }
-    savePlaylist(label, channels)
+    await savePlaylist(label, channels)
     onLoaded(channels, label)
-    setMessage(`تم تحميل ${channels.length} قناة`)
+    setMessage(`تم الاشتراك — ${channels.length} قناة`)
     setError(null)
   }
 
@@ -46,36 +45,47 @@ export function Settings({ onClose, onLoaded, onCleared }: Props) {
         const url = m3uUrl.trim()
         if (!url) throw new Error('أدخل رابط M3U')
         const text = await fetchPlaylistText(url)
-        await applyText(text, 'M3U')
-      } else if (tab === 'm3u-paste') {
-        if (!m3uText.trim()) throw new Error('الصق محتوى ملف M3U')
-        await applyText(m3uText, 'M3U (لصق)')
-      } else {
+        await applyChannels(parseM3u(text), 'M3U')
+      } else if (tab === 'xtream') {
         if (!server.trim() || !username.trim() || !password.trim()) {
           throw new Error('أكمل بيانات Xtream')
         }
-        const url = buildXtreamM3uUrl(server, username, password)
-        const text = await fetchPlaylistText(url)
-        await applyText(text, 'Xtream')
+        const channels = await loadXtreamChannels(server, username, password)
+        await applyChannels(channels, 'Xtream')
       }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : 'فشل التحميل'
-      const corsHint =
-        /Failed to fetch|NetworkError|CORS|HTTP/i.test(msg)
-          ? ' — جرّب تبويب «لصق M3U» إذا منع السيرفر التحميل من المتصفح (CORS).'
-          : ''
-      setError(msg + corsHint)
+      setError(e instanceof Error ? e.message : 'فشل التحميل')
     } finally {
       setBusy(false)
     }
   }
 
-  function handleClear() {
-    clearPlaylist()
+  async function handleFile(file: File | null) {
+    if (!file) return
+    setBusy(true)
+    setError(null)
+    setMessage(null)
+    try {
+      const text = await file.text()
+      await applyChannels(parseM3u(text), `ملف ${file.name}`)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'فشل قراءة الملف')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  async function handleClear() {
+    await clearPlaylist()
     onCleared()
     setMessage('تمت إعادة القنوات التجريبية')
     setError(null)
   }
+
+  const xtreamDownload =
+    server.trim() && username.trim() && password.trim()
+      ? buildXtreamM3uUrl(server, username, password, 'm3u8')
+      : null
 
   return (
     <div className="settings-screen">
@@ -84,17 +94,17 @@ export function Settings({ onClose, onLoaded, onCleared }: Props) {
           رجوع
         </button>
         <div>
-          <h1>إضافة قنوات IPTV</h1>
-          <p>استخدم قائمة M3U أو اشتراك Xtream الخاص بك (مصدر مرخّص).</p>
+          <h1>اشتراك المزود</h1>
+          <p>أدخل Xtream أو ارفع/الصق قائمة M3U الخاصة بك.</p>
         </div>
       </header>
 
       <div className="settings-tabs" role="tablist">
         {(
           [
-            ['m3u-url', 'رابط M3U'],
-            ['m3u-paste', 'لصق M3U'],
             ['xtream', 'Xtream'],
+            ['m3u-url', 'رابط M3U'],
+            ['m3u-file', 'رفع ملف'],
           ] as const
         ).map(([id, label]) => (
           <button
@@ -124,15 +134,13 @@ export function Settings({ onClose, onLoaded, onCleared }: Props) {
           </label>
         )}
 
-        {tab === 'm3u-paste' && (
+        {tab === 'm3u-file' && (
           <label className="field">
-            <span>محتوى ملف M3U</span>
-            <textarea
-              value={m3uText}
-              onChange={(e) => setM3uText(e.target.value)}
-              placeholder={'#EXTM3U\n#EXTINF:-1,قناة\nhttp://...'}
-              rows={10}
-              spellCheck={false}
+            <span>اختر ملف M3U من الجوال</span>
+            <input
+              type="file"
+              accept=".m3u,.m3u8,audio/x-mpegurl,application/vnd.apple.mpegurl,text/plain"
+              onChange={(e) => void handleFile(e.target.files?.[0] ?? null)}
             />
           </label>
         )}
@@ -144,7 +152,7 @@ export function Settings({ onClose, onLoaded, onCleared }: Props) {
               <input
                 value={server}
                 onChange={(e) => setServer(e.target.value)}
-                placeholder="http://host:port"
+                placeholder="host:port أو https://host:port"
                 autoComplete="off"
                 spellCheck={false}
               />
@@ -166,29 +174,56 @@ export function Settings({ onClose, onLoaded, onCleared }: Props) {
                 autoComplete="current-password"
               />
             </label>
+            {xtreamDownload && (
+              <p className="settings-note">
+                إذا فشل التحميل:{' '}
+                <a href={xtreamDownload} target="_blank" rel="noreferrer">
+                  افتح رابط القائمة
+                </a>{' '}
+                ثم استخدم تبويب «رفع ملف».
+              </p>
+            )}
           </div>
         )}
 
-        <div className="settings-actions">
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={busy}
-            onClick={() => void handleLoad()}
-          >
-            {busy ? 'جاري التحميل…' : 'تحميل القنوات'}
-          </button>
-          <button type="button" className="btn btn-ghost" onClick={handleClear}>
-            مسح والاكتفاء بالتجريبي
-          </button>
-        </div>
+        {tab !== 'm3u-file' && (
+          <div className="settings-actions">
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={busy}
+              onClick={() => void handleLoad()}
+            >
+              {busy ? 'جاري الاشتراك…' : 'تفعيل الاشتراك'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => void handleClear()}
+            >
+              مسح والاكتفاء بالتجريبي
+            </button>
+          </div>
+        )}
+
+        {tab === 'm3u-file' && (
+          <div className="settings-actions">
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => void handleClear()}
+            >
+              مسح والاكتفاء بالتجريبي
+            </button>
+          </div>
+        )}
 
         {message && <p className="settings-ok">{message}</p>}
         {error && <p className="settings-err">{error}</p>}
 
         <p className="settings-note">
-          لا تشارك رابط الاشتراك أو كلمة المرور في الدردشة. البيانات تُحفظ على هذا
-          الجهاز فقط. بعض السيرفرات تمنع التشغيل من متصفح الويب بسبب CORS.
+          لا ترسل بيانات الاشتراك في الدردشة. التحميل يمر عبر بروكسي التطبيق لتجاوز
+          حظر المتصفح (CORS).
         </p>
       </div>
     </div>

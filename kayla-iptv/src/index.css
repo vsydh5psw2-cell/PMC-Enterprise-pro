@@ -215,6 +215,15 @@ button {
   margin: 0.5rem 0 0;
 }
 
+.settings-note a {
+  color: var(--teal);
+  text-decoration: underline;
+}
+
+.field input[type='file'] {
+  padding: 0.75rem;
+}
+
 .cats {
   display: flex;
   flex-wrap: wrap;

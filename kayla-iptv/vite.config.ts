@@ -1,7 +1,7 @@
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
+import { playlistProxyPlugin } from './vite-plugin-playlist-proxy.ts'
 
-// https://vite.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), playlistProxyPlugin()],
 })

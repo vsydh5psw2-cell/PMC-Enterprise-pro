@@ -1,7 +1,9 @@
+import { get, set, del } from 'idb-keyval'
 import type { Channel } from '../data/channels'
 import { demoChannels } from '../data/channels'
 
-const KEY = 'kayla-iptv-playlist-v1'
+const KEY = 'kayla-iptv-playlist-v2'
+const LEGACY_KEY = 'kayla-iptv-playlist-v1'
 
 export type StoredPlaylist = {
   sourceLabel: string
@@ -9,38 +11,55 @@ export type StoredPlaylist = {
   savedAt: string
 }
 
-export function loadPlaylist(): StoredPlaylist | null {
+export async function loadPlaylist(): Promise<StoredPlaylist | null> {
   try {
-    const raw = localStorage.getItem(KEY)
+    const stored = await get<StoredPlaylist>(KEY)
+    if (stored?.channels?.length) return stored
+
+    // Migrate old localStorage playlist if present.
+    const raw = localStorage.getItem(LEGACY_KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as StoredPlaylist
     if (!parsed?.channels?.length) return null
+    await savePlaylist(parsed.sourceLabel, parsed.channels)
+    localStorage.removeItem(LEGACY_KEY)
     return parsed
   } catch {
     return null
   }
 }
 
-export function savePlaylist(sourceLabel: string, channels: Channel[]) {
+export async function savePlaylist(sourceLabel: string, channels: Channel[]) {
   const payload: StoredPlaylist = {
     sourceLabel,
     channels,
     savedAt: new Date().toISOString(),
   }
-  localStorage.setItem(KEY, JSON.stringify(payload))
+  try {
+    await set(KEY, payload)
+  } catch (err) {
+    const name = err instanceof DOMException ? err.name : ''
+    if (name === 'QuotaExceededError' || /quota/i.test(String(err))) {
+      throw new Error(
+        'القائمة كبيرة جداً للتخزين على الجهاز. جرّب قائمة أقصر أو تصفية المجموعات.',
+      )
+    }
+    throw err
+  }
   return payload
 }
 
-export function clearPlaylist() {
-  localStorage.removeItem(KEY)
+export async function clearPlaylist() {
+  await del(KEY)
+  localStorage.removeItem(LEGACY_KEY)
 }
 
-export function activeCatalog(): {
+export async function activeCatalog(): Promise<{
   channels: Channel[]
   sourceLabel: string
   isDemo: boolean
-} {
-  const stored = loadPlaylist()
+}> {
+  const stored = await loadPlaylist()
   if (stored?.channels.length) {
     return {
       channels: stored.channels,

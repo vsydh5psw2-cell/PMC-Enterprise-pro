@@ -1,6 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import type { Channel } from './data/channels'
+import { demoChannels } from './data/channels'
 import { useTvNav } from './hooks/useTvNav'
 import { Player } from './components/Player'
 import { Settings } from './components/Settings'
@@ -11,13 +12,27 @@ import './index.css'
 const GRID_COLS = 4
 
 function App() {
-  const initial = activeCatalog()
-  const [channelList, setChannelList] = useState<Channel[]>(initial.channels)
-  const [sourceLabel, setSourceLabel] = useState(initial.sourceLabel)
-  const [isDemo, setIsDemo] = useState(initial.isDemo)
+  const [ready, setReady] = useState(false)
+  const [channelList, setChannelList] = useState<Channel[]>(demoChannels)
+  const [sourceLabel, setSourceLabel] = useState('تجريبي')
+  const [isDemo, setIsDemo] = useState(true)
   const [categoryId, setCategoryId] = useState('all')
   const [active, setActive] = useState<Channel | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+    void activeCatalog().then((catalog) => {
+      if (cancelled) return
+      setChannelList(catalog.channels)
+      setSourceLabel(catalog.sourceLabel)
+      setIsDemo(catalog.isDemo)
+      setReady(true)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const cats = useMemo(() => categoriesFromChannels(channelList), [channelList])
 
@@ -29,7 +44,7 @@ function App() {
   const { focusIndex, setFocusIndex } = useTvNav({
     columns: GRID_COLS,
     itemCount: filtered.length,
-    enabled: !active && !showSettings,
+    enabled: ready && !active && !showSettings,
     onSelect: (index) => {
       const ch = filtered[index]
       if (ch) setActive(ch)
@@ -50,14 +65,16 @@ function App() {
           setIsDemo(false)
           setCategoryId('all')
           setFocusIndex(0)
+          setShowSettings(false)
         }}
         onCleared={() => {
-          const next = activeCatalog()
-          setChannelList(next.channels)
-          setSourceLabel(next.sourceLabel)
-          setIsDemo(next.isDemo)
-          setCategoryId('all')
-          setFocusIndex(0)
+          void activeCatalog().then((next) => {
+            setChannelList(next.channels)
+            setSourceLabel(next.sourceLabel)
+            setIsDemo(next.isDemo)
+            setCategoryId('all')
+            setFocusIndex(0)
+          })
         }}
       />
     )
@@ -72,9 +89,11 @@ function App() {
             <span className="brand-iptv">IPTV</span>
           </div>
           <p className="topbar-note">
-            {isDemo
-              ? 'تجريبي — اضغط إضافة قنوات لاشتراكك'
-              : `${channelList.length} قناة · ${sourceLabel}`}
+            {!ready
+              ? 'جاري التحميل…'
+              : isDemo
+                ? 'تجريبي — اضغط إضافة قنوات لاشتراكك'
+                : `${channelList.length} قناة · ${sourceLabel}`}
           </p>
         </div>
         <button
